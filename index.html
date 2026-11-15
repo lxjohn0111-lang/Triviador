@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Borderwise — Trivia Conquest</title>
+<meta name="description" content="Conquer the map of your own country with what you know. A trivia strategy game.">
+<link rel="preload" href="fonts/rubik-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+<script id="cg-sdk" src="https://sdk.crazygames.com/crazygames-sdk-v3.js" async></script>
+</head>
+<body>
+<div id="app" data-theme="0">
+  <div id="stage"><svg id="map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <div id="toasts"></div>
+  <div id="boot">
+    <div class="boot-in">
+      <svg class="boot-mark" viewBox="0 0 64 64"><defs><linearGradient id="blg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5aa2ff"/><stop offset="1" stop-color="#2b4fc4"/></linearGradient></defs><path d="M32 4l22 8v18c0 14-9.5 24-22 30C19.5 54 10 44 10 30V12z" fill="url(#blg)" stroke="#fff3c4" stroke-width="3" stroke-linejoin="round"/><path d="M22 40V26h-2v-6h4v3h4v-3h8v3h4v-3h4v6h-2v14z" fill="#fff3c4"/><rect x="29" y="31" width="6" height="9" rx="3" fill="#1b2a52"/></svg>
+      <div class="logo-text big"><span>Border</span><span class="accent">wise</span></div>
+      <div class="boot-bar"><i id="boot-fill"></i></div>
+    </div>
+  </div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "borderwise-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build-time data generators (maps, geography facts). Not needed at runtime.",
+  "dependencies": {
+    "@fontsource-variable/rubik": "^5.3.0",
+    "all-the-cities": "^3.1.0",
+    "countries-and-timezones": "^3.11.0",
+    "d3-delaunay": "^6.0.6",
+    "d3-geo": "^3.1.2",
+    "polygon-clipping": "^0.15.7",
+    "polylabel": "^2.1.0",
+    "topojson-client": "^3.1.0",
+    "topojson-server": "^3.0.1",
+    "topojson-simplify": "^3.0.3"
+  }
+}
