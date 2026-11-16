@@ -85,8 +85,13 @@ Bot difficulty scales with the player's league.
 | Rewarded ads | "Double coins" after a match, free boosters in the shop. |
 | `user.systemInfo` | Country detection. |
 | `user.getUser` | Default player name. |
-| `data.getItem` / `setItem` | Cloud save of the profile, with localStorage as fallback. |
+| `data.getItem` / `setItem` | Saves progress. On CrazyGames the Data module is the only store, with no localStorage; off-platform the game falls back to localStorage. |
+| `user.addAuthListener` | Reloads progress when the player signs in or out. |
 | Settings listener (`muteAudio`) | Audio follows the platform mute setting. Audio is also muted while an ad plays. |
+
+## CrazyGames submission pack
+
+The `crazygames/` folder holds everything the submission form asks for: the upload zip, a 19.6-second 1080p preview video, the three cover images (1920×1080, 800×1200, 800×800) and `LISTING.md` with the description, controls, tags and answers for the form. Rebuild the zip after code changes with `python3 tools/package_crazygames.py`.
 
 ## Uploading to CrazyGames
 

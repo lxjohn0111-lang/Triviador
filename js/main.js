@@ -46,7 +46,7 @@ const app = {
     document.querySelectorAll('.detect,.modal-wrap').forEach((e) => e.remove());
     this.ui.hideMenu();
     this.view = new GameView($('app'));
-    this.view.mount(players, me, async () => { const yes = await this.view.confirm(t('leave_q'), t('yes'), t('no')); if (yes) onQuit(); });
+    this.view.mount(players, me, async () => { sdk.gameplayStop(); const yes = await this.view.confirm(t('leave_q'), t('yes'), t('no')); if (yes) onQuit(); else sdk.gameplayStart(); });
     $('app').classList.add('in-game');
     sdk.gameplayStart();
   },
@@ -142,6 +142,15 @@ async function boot() {
   sdk.onMuteChange = () => app.applyAudio();
   sdk.onAdState = (on) => { app._adMute = on; app.applyAudio(); };
   const p = store.load(); app.applyTheme(); app.applyAudio();
+  // a player who signs in or out on CrazyGames gets that account's progress
+  sdk.onAuthChange(async (user) => {
+    store.load();
+    if (user && user.username && !store.p.name) { store.p.name = user.username.slice(0, 16); store.save(); }
+    app.applyTheme(); app.applyAudio();
+    if (app.ui.menu) app.ui.showMenu();
+  });
+  window.addEventListener('pagehide', () => store.flush());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) store.flush(); });
   app.mapView = new MapView($('map')); app.ui = new UI(app);
   app.countries = await fetch('data/maps/index.json').then((r) => r.json()); progress(0.45);
   const has = (cc) => app.countries.some((c) => c.c === cc);

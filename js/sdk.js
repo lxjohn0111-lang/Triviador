@@ -75,13 +75,17 @@ export const sdk = {
   hideInviteButton() { if (this.active) safe(() => raw().game.hideInviteButton()); },
   get isInstantMultiplayer() { return this.active ? !!safe(() => raw().game.isInstantMultiplayer, false) : false; },
 
-  // Storage: CrazyGames cloud-synced data module when on-platform, localStorage otherwise.
+  // Storage. On CrazyGames progress lives ONLY in the SDK Data module (cloud-synced for signed-in
+  // players, kept by the SDK for guests). localStorage is used only when the game runs off-platform.
+  get dataModule() { return this.active && !!safe(() => raw().data, null); },
   getItem(k) {
-    if (this.active) { const v = safe(() => raw().data.getItem(k), null); if (v != null) return v; }
+    if (this.dataModule) return safe(() => raw().data.getItem(k), null);
     return safe(() => window.localStorage.getItem(k), null);
   },
   setItem(k, v) {
-    if (this.active) safe(() => raw().data.setItem(k, v));
+    if (this.dataModule) { safe(() => raw().data.setItem(k, v)); return; }
     safe(() => window.localStorage.setItem(k, v));
   },
+  // Signing in / out on CrazyGames switches the Data module to that account's save.
+  onAuthChange(fn) { if (this.active) safe(() => raw().user.addAuthListener((u) => fn(u))); },
 };

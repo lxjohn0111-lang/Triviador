@@ -31,7 +31,9 @@ export const store = {
     return this.p;
   },
   _t: null,
-  save() { clearTimeout(this._t); this._t = setTimeout(() => { try { sdk.setItem(KEY, JSON.stringify(this.p)); } catch (e) { /* ignore */ } }, 150); },
+  // The Data module allows 1 MB per game; the profile stays far below (the seen-question list is capped).
+  save() { clearTimeout(this._t); this._t = setTimeout(() => this.flush(), 150); },
+  flush() { clearTimeout(this._t); try { sdk.setItem(KEY, JSON.stringify(this.p)); } catch (e) { /* ignore */ } },
   markSeen(id) { const s = this.p.seen; s.push(id); if (s.length > 2500) s.splice(0, s.length - 2500); },
   seenSet() { return new Set(this.p.seen); },
 };
