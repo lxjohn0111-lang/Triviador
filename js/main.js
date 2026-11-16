@@ -40,6 +40,7 @@ const app = {
 
   async start(mode) {
     audio.unlock();
+    document.querySelectorAll('.detect').forEach((e) => e.remove());
     if (this.matches > 0) { await sdk.midgameAd(); this.applyAudio(); }
     this.matches++;
     const p = store.p; if (!p.name) p.name = t('you');
