@@ -65,6 +65,16 @@ export const sdk = {
   rewardedAd() { return this._ad('rewarded'); },
   get rewardedAvailable() { return this.active; },
 
+  // Multiplayer helpers (invite links / instant multiplayer). All safe off-platform.
+  inviteLink(roomId) { return this.active ? safe(() => raw().game.inviteLink({ roomId }), null) : null; },
+  inviteParam(name) {
+    if (this.active) { const v = safe(() => raw().game.getInviteParam(name), null); if (v) return v; }
+    return safe(() => new URLSearchParams(location.search).get(name), null);
+  },
+  showInviteButton(roomId) { if (this.active) safe(() => raw().game.showInviteButton({ roomId })); },
+  hideInviteButton() { if (this.active) safe(() => raw().game.hideInviteButton()); },
+  get isInstantMultiplayer() { return this.active ? !!safe(() => raw().game.isInstantMultiplayer, false) : false; },
+
   // Storage: CrazyGames cloud-synced data module when on-platform, localStorage otherwise.
   getItem(k) {
     if (this.active) { const v = safe(() => raw().data.getItem(k), null); if (v != null) return v; }

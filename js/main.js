@@ -7,7 +7,9 @@ import { detectCountry, languageFor, countryName, LANGS } from './detect.js';
 import { MapView } from './mapview.js';
 import { QuestionBank } from './questions.js';
 import { GameView } from './gameview.js';
-import { Game } from './game.js';
+import { Engine, makePlayers } from './engine.js';
+import { Presenter } from './presenter.js';
+import { HostSession, GuestSession, cleanCode } from './net.js';
 import { UI } from './ui.js';
 import { applyResult, applyQuit, botSkill } from './meta.js';
 
@@ -38,32 +40,99 @@ const app = {
 
   async rewarded() { audio.unlock(); const ok = await sdk.rewardedAd(); this.applyAudio(); return ok; },
 
-  async start(mode) {
+  // ---- matches -------------------------------------------------------------
+  beginMatch(players, me, onQuit) {
     audio.unlock();
-    document.querySelectorAll('.detect').forEach((e) => e.remove());
-    if (this.matches > 0) { await sdk.midgameAd(); this.applyAudio(); }
-    this.matches++;
-    const p = store.p; if (!p.name) p.name = t('you');
-    this.mapView.setMap(this.map, this.lang); // reset board
+    document.querySelectorAll('.detect,.modal-wrap').forEach((e) => e.remove());
+    this.ui.hideMenu();
     this.view = new GameView($('app'));
-    const game = new Game({ map: this.map, mapView: this.mapView, view: this.view, bank: this.bank, mode, profile: p, skill: botSkill(p) });
-    this.game = game;
-    this.view.mount(game.players, async () => { const yes = await this.view.confirm(t('leave_q'), t('yes'), t('no')); if (yes) this.view.cancel(); });
+    this.view.mount(players, me, async () => { const yes = await this.view.confirm(t('leave_q'), t('yes'), t('no')); if (yes) onQuit(); });
     $('app').classList.add('in-game');
     sdk.gameplayStart();
-    let sum = null;
-    try { sum = await game.run(); } catch (e) { console.error(e); }
+  },
+  async endMatch(sum, opts = {}) {
     sdk.gameplayStop();
     this.mapView.clearSelectable(); this.mapView.onHover = null; this.mapView.onInfo = null;
     store.save();
-    if (!sum) { applyQuit(); this.view.unmount(); $('app').classList.remove('in-game'); this.mapView.setMap(this.map, this.lang); this.ui.showMenu(); return; }
-    const rw = applyResult(sum, this.cc);
+    if (!sum || sum.aborted) {
+      if (!sum || sum.reason === 'quit') applyQuit();
+      this.view.unmount(); $('app').classList.remove('in-game');
+      if (opts.restoreMap) await this.restoreMap(); else this.mapView.setMap(this.map, this.lang);
+      this.ui.showMenu();
+      if (sum && sum.reason && sum.reason !== 'quit') this.ui.toast(t(sum.reason === 'full' ? 'mp_full' : 'mp_host_left'));
+      return 'menu';
+    }
+    const rw = applyResult(sum, opts.cc || this.cc);
     if (sum.place === 1) sdk.happytime();
     this.view.hint(''); this.view.setPhase('');
     const next = await this.ui.showResults(sum, rw);
     this.view.unmount(); $('app').classList.remove('in-game');
+    if (opts.restoreMap) await this.restoreMap(); else this.mapView.setMap(this.map, this.lang);
+    return next;
+  },
+  async restoreMap() { this.mapView.setMap(this.map, this.lang); this.bank.setMap(this.map, this.cc); },
+
+  async start(mode) {
+    audio.unlock();
+    if (this.matches > 0) { await sdk.midgameAd(); this.applyAudio(); }
+    this.matches++;
+    const p = store.p; if (!p.name) p.name = t('you');
+    this.mapView.setMap(this.map, this.lang);
+    const players = makePlayers([{ name: p.name, color: p.color, emblem: p.emblem }], botSkill(p));
+    let engine = null;
+    const pr = new Presenter({ view: null, mapView: this.mapView, me: 0, profile: p, send: (m) => engine && engine.input(0, m) });
+    this.beginMatch(players, 0, () => { engine.cancel(); pr.abort('quit'); });
+    pr.view = this.view; pr.players = players.map((x) => ({ ...x }));
+    engine = new Engine({ map: this.map, bank: this.bank, mode, players, out: (e) => pr.apply(e) });
+    engine.run().catch((e) => { console.error(e); pr.abort('error'); });
+    const sum = await pr.result;
+    const next = await this.endMatch(sum);
     if (next === 'again') return this.start(mode);
-    this.mapView.setMap(this.map, this.lang); this.ui.showMenu(); this.ui.dailyReward();
+    if (next === 'menu') { this.ui.showMenu(); if (sum && !sum.aborted) this.ui.dailyReward(); }
+  },
+
+  // ---- online ------------------------------------------------------------------
+  async hostCreate(settings) { const p = store.p; return HostSession.create({ name: p.name || t('you'), color: p.color, emblem: p.emblem }, settings); },
+  async guestJoin(code) { const p = store.p; return GuestSession.join(cleanCode(code), { name: p.name || t('you'), color: p.color, emblem: p.emblem }); },
+
+  async startHost(session) {
+    const p = store.p, mode = session.settings.mode;
+    this.matches++;
+    this.mapView.setMap(this.map, this.lang);
+    const players = makePlayers(session.seats.map((s) => ({ name: s.name, color: s.color, emblem: s.emblem, peer: s.peer })), botSkill(p));
+    let engine = null;
+    const pr = new Presenter({ view: null, mapView: this.mapView, me: 0, profile: p, online: true, send: (m) => engine && engine.input(0, m) });
+    this.beginMatch(players, 0, () => { if (engine) engine.cancel(); session.close(); pr.abort('quit'); });
+    pr.view = this.view; pr.players = players.map((x) => ({ ...x }));
+    this.view.hint(t('mp_loading_players'));
+    await session.begin(players, { cc: this.cc, lang: this.lang, mode });
+    this.view.hint('');
+    engine = new Engine({ map: this.map, bank: this.bank, mode, players, out: (e) => { pr.apply(e); session.relay(e); } });
+    session.engine = engine;
+    engine.run().catch((e) => { console.error(e); pr.abort('error'); });
+    const sum = await pr.result;
+    setTimeout(() => session.close(), 1500);
+    await this.endMatch(sum);
+    this.ui.showMenu();
+  },
+
+  async startGuest(session, start) {
+    const p = store.p;
+    this.matches++;
+    let map;
+    try { map = start.cc === this.cc ? this.map : await fetch(`data/maps/${start.cc}.json`).then((r) => r.json()); }
+    catch (e) { session.close(); this.ui.showMenu(); this.ui.toast(t('mp_host_left')); return; }
+    this.mapView.setMap(map, this.lang);
+    const pr = new Presenter({ view: null, mapView: this.mapView, me: start.you, profile: p, online: true, send: (m) => session.input(m) });
+    this.beginMatch(start.players, start.you, () => { session.close(); pr.abort('quit'); });
+    pr.view = this.view; pr.players = start.players.map((x) => ({ ...x, alive: true }));
+    session.onEvent = (e) => pr.apply(e);
+    session.onClosed = (reason) => pr.abort(reason === 'started' ? 'full' : 'host');
+    session.ready();
+    const sum = await pr.result;
+    session.close();
+    await this.endMatch(sum, { restoreMap: true, cc: start.cc });
+    this.ui.showMenu();
   },
 };
 
@@ -85,7 +154,10 @@ async function boot() {
   sdk.loadingStop();
   const b = $('boot'); b.classList.add('out'); setTimeout(() => b.remove(), 500);
   if (detected) app.ui.detectNotice(cc, lang);
-  setTimeout(() => { if (app.ui.menu) app.ui.dailyReward(); }, detected ? 1400 : 500);
+  const invite = cleanCode(sdk.inviteParam('roomId'));
+  if (invite) setTimeout(() => app.ui.openMultiplayer({ join: invite }), 600);
+  else if (sdk.isInstantMultiplayer) setTimeout(() => app.ui.openMultiplayer({ create: true }), 600);
+  else setTimeout(() => { if (app.ui.menu) app.ui.dailyReward(); }, detected ? 1400 : 500);
 }
 
 // platform hygiene: no page scroll / context menu / text selection side effects inside the game frame

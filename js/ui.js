@@ -6,6 +6,7 @@ import { sdk } from './sdk.js';
 import { store, leagueOf, levelInfo, LEAGUES } from './store.js';
 import { COLORS } from './mapview.js';
 import { LANGS, countryName, languageFor } from './detect.js';
+import { cleanCode, netAvailable } from './net.js';
 import { ACHIEVEMENTS, achValue, PRICES, DAILY, ensureQuests, dailyAvailable, claimDaily } from './meta.js';
 
 const click = (fn) => (e) => { audio.unlock(); audio.play('click'); fn(e); };
@@ -18,7 +19,7 @@ export class UI {
   showMenu() {
     this.hideMenu(); const p = this.p, app = this.app; const lv = levelInfo(p.xp), lg = leagueOf(p.trophies);
     const quests = ensureQuests(); const openQuests = quests.filter((q) => !q.done).length;
-    const modeBtn = (m) => h('button', { class: 'mode' + (this.mode === m ? ' on' : ''), onclick: click(() => { this.mode = m; this.showMenu(); }) }, h('b', { text: t('mode_' + m) }), h('small', { text: t(`mode_${m}_d`) }));
+    const modeBtn = (m) => h('button', { class: 'mode' + (this.mode === m ? ' on' : ''), 'data-mode': m, onclick: click(() => { this.mode = m; this.showMenu(); }) }, h('b', { text: t('mode_' + m) }), h('small', { text: t(`mode_${m}_d`) }));
     this.menu = h('div', { class: 'menu' },
       h('div', { class: 'topbar' },
         h('button', { class: 'pchip', onclick: click(() => this.openProfile()) }, avatar(p.emblem, COLORS[p.color]), h('span', { class: 'pchip-t' }, h('b', { text: p.name || t('you') }), h('small', {}, t('level', { n: lv.lvl }), h('i', { class: 'xpbar' }, h('i', { style: `width:${Math.round((lv.cur / lv.need) * 100)}%` }))))),
@@ -28,8 +29,10 @@ export class UI {
         h('div', { class: 'logo' }, h('div', { class: 'logo-mark', html: '<svg viewBox="0 0 64 64"><path d="M32 4l22 8v18c0 14-9.5 24-22 30C19.500 54 10 44 10 30V12z" fill="url(#lg)" stroke="#fff3c4" stroke-width="3" stroke-linejoin="round"/><path d="M22 40V26h-2v-6h4v3h4v-3h8v3h4v-3h4v6h-2v14z" fill="#fff3c4"/><rect x="29" y="31" width="6" height="9" rx="3" fill="#1b2a52"/><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5aa2ff"/><stop offset="1" stop-color="#2b4fc4"/></linearGradient></defs></svg>' }), h('div', { class: 'logo-text' }, h('span', { text: 'Border' }), h('span', { class: 'accent', text: 'wise' }))),
         h('div', { class: 'tagline', text: t('tagline', { country: app.countryLabel() }) }),
         h('button', { class: 'country-chip', onclick: click(() => this.openPicker()) }, h('span', { class: 'cc-globe', html: ICON.globe }), h('span', { class: 'cc-name', text: app.countryLabel() }), h('span', { class: 'cc-lang', text: LANGS[app.lang] }), h('span', { class: 'cc-caret', text: '▾' })),
-        h('div', { class: 'modes' }, modeBtn('classic'), modeBtn('blitz')),
-        h('button', { class: 'btn play', onclick: click(() => { this.hideMenu(); app.start(this.mode); }) }, h('span', { html: ICON.play }), t('play')),
+        h('div', { class: 'modes' }, modeBtn('blitz'), modeBtn('classic'), modeBtn('campaign')),
+        h('div', { class: 'play-stack' },
+          h('button', { class: 'btn play', onclick: click(() => { this.hideMenu(); app.start(this.mode); }) }, h('span', { html: ICON.play }), h('span', { class: 'play-t' }, h('b', { text: t('play') }), h('small', { text: t('vs_bots') }))),
+          h('button', { class: 'btn mp', onclick: click(() => this.openMultiplayer()) }, h('span', { html: ICON.users }), t('mp'))),
       ),
       h('div', { class: 'dock' },
         this._dock(ICON.cart, t('shop'), () => this.openShop()),
@@ -52,7 +55,7 @@ export class UI {
     this.root.appendChild(wrap); audio.play('open');
     return { close, wrap };
   }
-  toast(text, icon = '') { const e = h('div', { class: 'toast', html: icon + `<span></span>` }); e.querySelector('span').textContent = text; let box = document.getElementById('toasts'); box.appendChild(e); setTimeout(() => { e.classList.add('out'); setTimeout(() => e.remove(), 300); }, 2600); }
+  toast(text, icon = '') { if (!text) return; const e = h('div', { class: 'toast', html: icon + `<span></span>` }); e.querySelector('span').textContent = text; let box = document.getElementById('toasts'); box.appendChild(e); setTimeout(() => { e.classList.add('out'); setTimeout(() => e.remove(), 300); }, 2600); }
 
   // ---------- detection notice (always English, as it runs before the player confirms a language) ----------
   detectNotice(cc, lang) {
@@ -158,11 +161,84 @@ export class UI {
     });
   }
 
+  // ---------- multiplayer ----------
+  openMultiplayer(opts = {}) {
+    const app = this.app; let session = null, isHost = false, closed = false, lobby = null;
+    const body = h('div', { class: 'mp' });
+    const err = h('p', { class: 'mp-err', role: 'alert' });
+    const showErr = (k) => { err.textContent = k ? t(k) : ''; };
+    const leave = () => { sdk.hideInviteButton(); if (session) { session.close(); session = null; } };
+    const m = this.modal(t('mp'), body, { cls: 'mp-modal', onClose: () => { closed = true; leave(); } });
+    const busy = (on) => body.classList.toggle('busy', on);
+    const seatRows = (seats) => h('div', { class: 'seats' }, ...[0, 1, 2].map((i) => {
+      const s = seats[i];
+      if (s) return h('div', { class: 'seat' }, avatar(s.emblem, COLORS[s.color] || COLORS[0], 'sm'), h('span', { class: 'seat-name', text: s.name }), i === 0 ? h('em', { class: 'seat-tag', text: t('mp_host') }) : null);
+      return h('div', { class: 'seat empty' }, h('span', { class: 'seat-dot' }), h('span', { class: 'seat-name', text: t('mp_open_seat') }));
+    }));
+    const modePick = (cur, onPick) => h('div', { class: 'modes small' }, ...['blitz', 'classic', 'campaign'].map((md) => h('button', { class: 'mode' + (cur === md ? ' on' : ''), disabled: !onPick, onclick: onPick ? click(() => onPick(md)) : null }, h('b', { text: t('mode_' + md) }))));
+    const copy = async (text, btn) => { try { await navigator.clipboard.writeText(text); btn.textContent = t('mp_copied'); } catch (e) { const r = document.createRange(); const c = body.querySelector('.code-big'); if (c) { r.selectNodeContents(c); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } } setTimeout(() => { if (btn.isConnected) btn.textContent = btn.dataset.label; }, 1600); };
+    const mkCopy = (label, text) => { const b = h('button', { class: 'btn small ghost', 'data-label': label, text: label }); b.addEventListener('click', click(() => copy(text, b))); return b; };
+
+    const drawLobby = () => {
+      if (closed || !lobby) return;
+      body.innerHTML = '';
+      const link = sdk.inviteLink(lobby.code);
+      const country = countryName(lobby.cc, app.lang, lobby.cc), lang = LANGS[lobby.lang] || lobby.lang;
+      body.append(
+        h('p', { class: 'muted left', text: t(isHost ? 'mp_share' : 'mp_joined') }),
+        h('div', { class: 'code-row' }, h('div', { class: 'code-big', text: lobby.code }), h('div', { class: 'code-btns' }, mkCopy(t('mp_copy'), lobby.code), link ? mkCopy(t('mp_invite'), link) : null)),
+        h('h3', { text: t('mp_players') }), seatRows(lobby.seats),
+        h('p', { class: 'muted left', text: t('mp_bots_fill') }),
+        h('h3', { text: t('mp_mode') }), modePick(lobby.mode, isHost ? (md) => session.setSettings({ mode: md }) : null),
+        h('p', { class: 'muted left', text: t('mp_map_lang', { country, lang }) }),
+        err,
+        h('div', { class: 'row' }, h('button', { class: 'btn ghost', text: t('mp_leave'), onclick: click(() => m.close()) }),
+          isHost ? h('button', { class: 'btn primary', text: t('mp_start'), onclick: click(() => { const s = session; session = null; closed = true; sdk.hideInviteButton(); m.wrap.remove(); app.startHost(s); }) }) : h('div', { class: 'wait-pill' }, h('span', { class: 'spinner sm' }), h('span', { text: t('mp_waiting_host') }))));
+    };
+    const attachGuest = (s) => {
+      session = s; isHost = false;
+      s.onLobby = (l) => { lobby = l; drawLobby(); };
+      s.onStart = (st) => { session = null; closed = true; m.wrap.remove(); app.startGuest(s, st); };
+      s.onClosed = (reason) => { if (closed) return; session = null; lobby = null; drawChoose(); showErr(reason === 'full' ? 'mp_full' : reason === 'started' ? 'mp_started' : reason === 'version' ? 'mp_version' : 'mp_host_left'); };
+    };
+    const create = async () => {
+      showErr(''); busy(true);
+      try {
+        const s = await app.hostCreate({ mode: this.mode, cc: app.cc, lang: app.lang });
+        if (closed) { s.close(); return; }
+        session = s; isHost = true; s.onLobby = (l) => { lobby = l; drawLobby(); }; lobby = s.lobbyMsg(); sdk.showInviteButton(s.code); drawLobby();
+      } catch (e) { showErr('mp_unavailable'); } finally { busy(false); }
+    };
+    const join = async (code) => {
+      code = cleanCode(code); if (code.length !== 5) { showErr('mp_bad_code'); return; }
+      showErr(''); busy(true);
+      try { const s = await app.guestJoin(code); if (closed) { s.close(); return; } attachGuest(s); }
+      catch (e) { showErr(e.message === 'not_found' ? 'mp_not_found' : 'mp_unavailable'); } finally { busy(false); }
+    };
+    const drawChoose = () => {
+      body.innerHTML = '';
+      if (!netAvailable()) { body.append(h('p', { class: 'mp-err', text: t('mp_unavailable') })); return; }
+      const input = h('input', { class: 'search code-in', id: 'mp-code', maxlength: 5, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: t('mp_code_ph'), 'aria-label': t('mp_code') });
+      input.addEventListener('input', () => { input.value = cleanCode(input.value); });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(input.value); });
+      body.append(
+        h('p', { class: 'muted left', text: t('mp_intro') }),
+        h('button', { class: 'btn primary wide', onclick: click(create) }, h('span', { html: ICON.users }), t('mp_create')),
+        h('div', { class: 'or' }, h('span', { text: t('mp_or') })),
+        h('label', { class: 'lbl', for: 'mp-code', text: t('mp_code') }),
+        h('div', { class: 'join-row' }, input, h('button', { class: 'btn', text: t('mp_join'), onclick: click(() => join(input.value)) })),
+        err, h('div', { class: 'mp-busy' }, h('span', { class: 'spinner sm' }), h('span', { text: t('mp_connecting') })));
+      if (opts.join) { input.value = opts.join; const c = opts.join; opts.join = null; join(c); }
+      if (opts.create) { opts.create = false; create(); }
+    };
+    drawChoose();
+  }
+
   // ---------- results ----------
   showResults(sum, rw) {
     return new Promise((res) => {
       const p = this.p; const win = sum.place === 1; const title = win ? t('r_win') : sum.eliminated ? t('r_elim') : sum.place === 2 ? t('r_second') : t('r_third');
-      const rows = sum.ranking.map((id, i) => { const pl = sum.players[id]; return h('div', { class: 'rrow' + (id === 0 ? ' me' : '') + (pl.alive ? '' : ' out'), style: `--c:${COLORS[pl.color].base};--cd:${COLORS[pl.color].dark};animation-delay:${0.25 + i * 0.15}s` }, h('span', { class: 'rpos', text: String(i + 1) }), avatar(pl.emblem, COLORS[pl.color]), h('b', { text: pl.name }), h('span', { class: 'rscore', text: fmt(sum.scores[id]) })); });
+      const rows = sum.ranking.map((id, i) => { const pl = sum.players[id]; return h('div', { class: 'rrow' + (id === sum.me ? ' me' : '') + (pl.alive ? '' : ' out'), style: `--c:${COLORS[pl.color].base};--cd:${COLORS[pl.color].dark};animation-delay:${0.25 + i * 0.15}s` }, h('span', { class: 'rpos', text: String(i + 1) }), avatar(pl.emblem, COLORS[pl.color]), h('b', { text: pl.name }), h('span', { class: 'rscore', text: fmt(sum.scores[id]) })); });
       const coinEl = h('b', { text: '+' + rw.coins });
       const chips = h('div', { class: 'rchips' }, h('span', { class: 'rchip', html: ICON.coin }, coinEl), h('span', { class: 'rchip', html: ICON.star + `<b>+${rw.xp} XP</b>` }), h('span', { class: 'rchip ' + (rw.tro >= 0 ? 'up' : 'down'), html: ICON.trophy + `<b>${rw.tro >= 0 ? '+' : ''}${rw.tro}</b>` }));
       const extras = h('div', { class: 'rextras' });
@@ -174,10 +250,10 @@ export class UI {
       for (const q of rw.questsDone) notes.appendChild(h('div', { class: 'rnote', html: `${ICON.check}<span>${t('quest_done')} ${t('q_' + q.k)}</span>${ICON.coin}<b>+${q.r}</b>` }));
       for (const a of rw.newAch) notes.appendChild(h('div', { class: 'rnote', html: `${ICON.star}<span>${t('r_newach')}</span>${ICON.coin}<b>+${a.r}</b>` }));
       let doubled = false;
-      const dbl = sdk.rewardedAvailable ? h('button', { class: 'btn gold', html: `${ICON.video}<span>${t('r_double')}</span>`, onclick: click(async () => { if (doubled) return; const ok = await this.app.rewarded(); if (ok) { doubled = true; p.coins += rw.coins; store.save(); coinEl.textContent = '+' + rw.coins * 2; audio.play('coin'); dbl.remove(); } }) }) : null;
+      const dbl = sdk.rewardedAvailable && !sum.online ? h('button', { class: 'btn gold', html: `${ICON.video}<span>${t('r_double')}</span>`, onclick: click(async () => { if (doubled) return; const ok = await this.app.rewarded(); if (ok) { doubled = true; p.coins += rw.coins; store.save(); coinEl.textContent = '+' + rw.coins * 2; audio.play('coin'); dbl.remove(); } }) }) : null;
       const done = (v) => { wrap.remove(); res(v); };
       const wrap = h('div', { class: 'results ' + (win ? 'win' : 'lose') }, h('div', { class: 'results-in' }, h('div', { class: 'rtitle', text: title }), h('div', { class: 'rrows' }, ...rows), chips, extras, notes,
-        h('div', { class: 'row' }, dbl, h('button', { class: 'btn ghost', text: t('r_menu'), onclick: click(() => done('menu')) }), h('button', { class: 'btn primary', text: t('r_again'), onclick: click(() => done('again')) }))));
+        h('div', { class: 'row' }, dbl, h('button', { class: 'btn ghost', text: t('r_menu'), onclick: click(() => done('menu')) }), sum.online ? null : h('button', { class: 'btn primary', text: t('r_again'), onclick: click(() => done('again')) }))));
       this.root.appendChild(wrap);
       if (win) { audio.play('victory'); this.confetti(wrap); } else audio.play('defeat');
       if (rw.levelUp || rw.leagueUp >= 0) setTimeout(() => audio.play('levelup'), 1200);

@@ -12,9 +12,26 @@ A three-player trivia strategy game built for **CrazyGames**: conquer the map of
    - both right: a closest-number tiebreak decides the duel.
 
    Attacking a castle knocks down one tower per won duel. When the last tower falls, the owner is eliminated and the attacker takes their whole realm.
-4. **Result.** After the final round, the highest score wins. Classic mode has 4 battle rounds and Blitz has 2 with shorter timers.
+4. **Result.** After the final round, the highest score wins.
+
+There are three modes:
+
+- **Blitz:** 2 battle rounds with shorter timers.
+- **Classic:** 4 battle rounds.
+- **Long campaign:** modelled on the original game's long campaign. It has 3 expansion rounds, then a **division of free land** phase where every remaining territory goes to the closest guess one at a time, then 6 battle rounds with the attack order rotating each round.
 
 Players who are not in a duel can still answer from the sideline for bonus coins.
+
+## Multiplayer
+
+**Play** starts a match against two bots. **Multiplayer** opens a lobby:
+
+- **Create room** gives a 5-character room code. On CrazyGames the lobby also offers an invite link and shows the platform's invite button.
+- **Join** takes a friend's code, or opens automatically from a CrazyGames invite link (`roomId` invite parameter) or an instant-multiplayer start.
+- Up to 3 people play. Empty seats are filled with bots when the host starts. The host picks the mode, and the match uses the host's map and question language. Each player keeps their own interface language.
+- The host's browser runs the match and the other players' browsers mirror it. If a guest leaves, a bot takes over their seat. If the host leaves, the guests are told and return to the menu.
+
+Connections are browser-to-browser WebRTC data channels through [PeerJS](https://peerjs.com/) (vendored in `js/vendor/`, MIT licence). The public PeerJS signalling server and its STUN/TURN servers are used, so no game server is needed. Online play does not work inside a claude.ai artifact, whose sandbox blocks WebRTC.
 
 ## Country and language detection
 
@@ -91,8 +108,10 @@ Then open the printed URL. Opening `index.html` directly from disk will not work
 index.html          page shell; loads the CrazyGames SDK and js/main.js
 css/style.css       all styling (three map themes, responsive down to phone size)
 js/                 game code (vanilla ES modules, no dependencies)
-  main.js           boot + app controller
-  game.js           match engine and bot AI
+  main.js           boot + app controller (solo, host and guest matches)
+  engine.js         authoritative match engine and bot AI (emits plain-JSON events)
+  presenter.js      turns engine events into one player's screen, sends their input back
+  net.js            rooms, lobby and relay over PeerJS (WebRTC)
   gameview.js       HUD, question panels, number pad
   mapview.js        SVG map renderer and effects
   questions.js      question generator

@@ -90,16 +90,60 @@ export class MapView {
 
   layoutTokens() {
     const s = this.scale; if (!this.map) return;
+    const boxes = []; // obstacles in px, map coordinates scaled by s
+    const items = [];
     this.map.regions.forEach((r, i) => {
       const st = this.state[i], rpx = r.r * s; // inscribed radius in px
       const base = st.capital ? 30 : 17; const size = Math.max(st.capital ? 17 : 10, Math.min(base, rpx * (st.capital ? 1.05 : 0.8)));
       const tk = this.tokens[i]; tk.setAttribute('transform', `translate(${r.c[0]} ${r.c[1]}) scale(${size / s / 20})`); tk.dataset.size = size;
-      const lb = this.labels[i]; const fs = Math.max(9.5, Math.min(13.5, rpx * 0.3)); const name = lb.textContent;
-      const fits = rpx > 26 && name.length * fs * 0.56 < rpx * 3.4;
-      lb.style.display = fits ? '' : 'none'; lb.setAttribute('font-size', fs / s);
-      const hasToken = st.owner >= 0; lb.setAttribute('y', r.c[1] + (hasToken ? ((st.capital ? size * 1.34 : size * 0.86) + fs * 0.95) / s : fs * 0.35 / s));
-      lb.setAttribute('stroke-width', 3 / s);
+      const cx = r.c[0] * s, cy = r.c[1] * s, u = size / 20; // px per token unit
+      let tokBottom = cy;
+      if (st.owner >= 0) {
+        const bx = st.capital ? [-18, 18, -22, 25] : [-15, 15, -15, 17.5];
+        boxes.push({ x0: cx + bx[0] * u, x1: cx + bx[1] * u, y0: cy + bx[2] * u, y1: cy + bx[3] * u });
+        tokBottom = cy + bx[3] * u; items.push({ i, top: cy + bx[2] * u });
+      } else items.push({ i, top: cy });
+      const lb = this.labels[i]; const fs = Math.max(9.5, Math.min(13.5, rpx * 0.3));
+      lb.setAttribute('font-size', fs / s); lb.setAttribute('stroke-width', 3 / s);
+      Object.assign(items[items.length - 1], { lb, fs, cx, cy, tokBottom, owned: st.owner >= 0, area: r.a, rpx });
     });
+    // place region names, biggest regions first; a name that would touch a token or another name moves above its token or hides
+    const hit = (b) => boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+    items.sort((a, b) => b.area - a.area);
+    for (const it of items) {
+      const { lb, fs, cx, cy } = it; const w = this.textWidth(lb.textContent, fs) + 6, hgt = fs * 1.15;
+      const tries = it.owned ? [it.tokBottom + 2 + hgt / 2, it.top - 2 - hgt / 2] : [cy, cy - hgt * 0.8, cy + hgt * 0.8];
+      let placed = false;
+      if (it.rpx > 14 && w < it.rpx * 4.2) {
+        for (const y of tries) { const b = { x0: cx - w / 2, x1: cx + w / 2, y0: y - hgt / 2, y1: y + hgt / 2 }; if (!hit(b)) { boxes.push(b); lb.setAttribute('y', (y + fs * 0.35) / s); placed = true; break; } }
+      }
+      lb.classList.toggle('hidden-label', !placed); lb.style.display = '';
+    }
+    this.declutterNeighbours(boxes);
+  }
+  textWidth(text, fs) {
+    if (!this._ctx) { this._ctx = document.createElement('canvas').getContext('2d'); }
+    this._ctx.font = `700 ${fs}px Rubik, system-ui, sans-serif`;
+    return this._ctx.measureText(text).width;
+  }
+  // neighbouring-country names: hidden when they would touch a region name, a token, or the HUD bands
+  declutterNeighbours(boxes) {
+    if (!this.gNb) return;
+    const vb = (this.svg.getAttribute('viewBox') || '0 0 1 1').split(' ').map(Number), s = this.scale;
+    const rect = this.svg.getBoundingClientRect();
+    const hud = document.querySelector('.hud .pcards'), pill = document.querySelector('.hud .phase-pill:not(.hidden)');
+    const topBand = Math.max(hud ? hud.getBoundingClientRect().bottom : 0, pill ? pill.getBoundingClientRect().bottom : 0) - rect.top + 4;
+    const bottomBand = document.querySelector('.bstack') ? rect.height - (this.pads.bottom * (rect.width < 640 || rect.height < 480 ? 0.8 : 1)) : rect.height;
+    const placed = [];
+    for (const tEl of this.gNb.children) {
+      const fsU = +tEl.getAttribute('font-size') || 0, x = +tEl.getAttribute('x'), y = +tEl.getAttribute('y');
+      const fs = fsU * s, w = this.textWidth(tEl.textContent, fs) + (tEl.textContent.length * fs * 0.28) + 4;
+      const b = { x0: x * s - w / 2, x1: x * s + w / 2, y0: y * s - fs, y1: y * s + fs * 0.3 };
+      const sy0 = (y - vb[1]) * s - fs, sy1 = (y - vb[1]) * s + fs * 0.3;
+      const bad = sy0 < topBand || sy1 > bottomBand || boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0) || placed.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+      tEl.classList.toggle('hidden-label', bad);
+      if (!bad) placed.push(b);
+    }
   }
 
   _tokenMarkup(st) {
@@ -161,7 +205,19 @@ export class MapView {
     return () => g.remove();
   }
   float(i, text, color = '#fff') {
-    const r = this.map.regions[i], u = this.unit; const t = el('text', { x: r.c[0], y: r.c[1] - 26 * u, class: 'float-text', 'font-size': 22 * u, fill: color, 'stroke-width': 4 * u }, this.gFx); t.textContent = text;
+    const r = this.map.regions[i], u = this.unit, st = this.state[i], sz = +this.tokens[i].dataset.size || 14; const top = st.owner >= 0 ? sz * (st.capital ? 1.1 : 0.75) : 0; const t = el('text', { x: r.c[0], y: r.c[1] - (top + 8) * u, class: 'float-text', 'font-size': 22 * u, fill: color, 'stroke-width': 4 * u }, this.gFx); t.textContent = text;
     t.animate([{ transform: 'translate(0,0)', opacity: 0 }, { transform: `translate(0,${-12 * u}px)`, opacity: 1, offset: 0.2 }, { transform: `translate(0,${-46 * u}px)`, opacity: 0 }], { duration: 1500, easing: 'ease-out', fill: 'forwards' }); setTimeout(() => t.remove(), 1600);
+    this.clearPath(r.c[0], +t.getAttribute('y'), (this.textWidth(text, 22) / 2 + 6) * u, 52 * u, 1600);
+  }  // briefly fade labels lying in the path of a floating number so texts never cross
+  clearPath(x, y, halfW, rise, ms) {
+    const box = { x0: x - halfW, x1: x + halfW, y0: y - rise - 26 * this.unit, y1: y + 6 * this.unit };
+    for (const g of [this.gLabels, this.gNb]) for (const el of g.children) {
+      if (el.classList.contains('hidden-label')) continue;
+      let b; try { b = el.getBBox(); } catch (e) { continue; }
+      if (b.x < box.x1 && b.x + b.width > box.x0 && b.y < box.y1 && b.y + b.height > box.y0) {
+        el.classList.add('fx-hide'); clearTimeout(el._fxT); el._fxT = setTimeout(() => el.classList.remove('fx-hide'), ms);
+      }
+    }
   }
+
 }

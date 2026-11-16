@@ -46,7 +46,7 @@ export function applyResult(sum, cc) {
   p.coins += coins; p.xp += xp; p.trophies = Math.max(0, p.trophies + tro);
   const st = p.stats; st.games++; if (pl === 1) { st.wins++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); p.won[cc] = (p.won[cc] || 0) + 1; } else { st.streak = 0; if (pl === 2) st.second++; else st.third++; }
   st.mcRight += s.mcRight; st.mcTotal += s.mcTotal; st.numWins += s.numWins; st.numTotal += s.numTotal; st.captures += s.captures; st.defends += s.defends; st.capitals += s.capitals; st.sideline += s.sideline;
-  st.bestScore = Math.max(st.bestScore, sum.scores[0]);
+  st.bestScore = Math.max(st.bestScore, sum.myScore || 0);
   const inc = { win: pl === 1 ? 1 : 0, play: 1, mc: s.mcRight, capture: s.captures, defend: s.defends, guess: s.numWins, capital: s.capitals };
   const questsDone = [];
   for (const q of ensureQuests()) { if (q.done) continue; q.p = Math.min(q.n, q.p + (inc[q.k] || 0)); if (q.p >= q.n) { q.done = true; p.coins += q.r; questsDone.push(q); } }
