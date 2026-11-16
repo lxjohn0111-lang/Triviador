@@ -1,5 +1,6 @@
 // Boot + app controller.
 import { sdk } from './sdk.js';
+import { getJSON } from './data.js';
 import { store } from './store.js';
 import { audio } from './audio.js';
 import { loadLang, t } from './i18n.js';
@@ -29,7 +30,7 @@ const app = {
     try {
       if (!this.countries.find((c) => c.c === cc)) cc = 'US';
       if (!LANGS[lang]) lang = 'en';
-      const [map] = await Promise.all([fetch(`data/maps/${cc}.json`).then((r) => r.json()), loadLang(lang), this.bank.load(lang)]);
+      const [map] = await Promise.all([getJSON(`data/maps/${cc}.json`), loadLang(lang), this.bank.load(lang)]);
       this.cc = cc; this.lang = lang; this.map = map;
       this.mapView.setMap(map, lang); this.bank.setMap(map, cc);
       const p = store.p; p.country = cc; p.lang = lang; if (manual) p.manual = true; store.save();
@@ -120,7 +121,7 @@ const app = {
     const p = store.p;
     this.matches++;
     let map;
-    try { map = start.cc === this.cc ? this.map : await fetch(`data/maps/${start.cc}.json`).then((r) => r.json()); }
+    try { map = start.cc === this.cc ? this.map : await getJSON(`data/maps/${start.cc}.json`); }
     catch (e) { session.close(); this.ui.showMenu(); this.ui.toast(t('mp_host_left')); return; }
     this.mapView.setMap(map, this.lang);
     const pr = new Presenter({ view: null, mapView: this.mapView, me: start.you, profile: p, online: true, send: (m) => session.input(m) });
@@ -152,7 +153,7 @@ async function boot() {
   window.addEventListener('pagehide', () => store.flush());
   document.addEventListener('visibilitychange', () => { if (document.hidden) store.flush(); });
   app.mapView = new MapView($('map')); app.ui = new UI(app);
-  app.countries = await fetch('data/maps/index.json').then((r) => r.json()); progress(0.45);
+  app.countries = await getJSON('data/maps/index.json'); progress(0.45);
   const has = (cc) => app.countries.some((c) => c.c === cc);
   let cc, lang, detected = null;
   if (p.manual && p.country && has(p.country)) { cc = p.country; lang = p.lang || 'en'; }
@@ -175,4 +176,9 @@ window.addEventListener('contextmenu', (e) => { if (!/input/i.test(e.target.tagN
 window.addEventListener('pointerdown', () => audio.unlock(), { once: false, passive: true });
 document.addEventListener('visibilitychange', () => audio.set({ muted: document.hidden || sdk.platformMuted || !!app._adMute }));
 window.__app = app;
-boot().catch((e) => { console.error('boot failed', e); });
+boot().catch((e) => {
+  console.error('boot failed', e);
+  try { sdk.loadingStop(); } catch (x) { /* ignore */ }
+  const b = document.getElementById('boot');
+  if (b) { const m = document.createElement('p'); m.className = 'boot-error'; m.textContent = 'Borderwise could not start: ' + (e && e.message ? e.message : e) + '. Please reload the page.'; b.querySelector('.boot-in').appendChild(m); }
+});

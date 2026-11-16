@@ -374,3 +374,4 @@ input { font: inherit; }
 @media (max-width: 380px) { .pchip-t b { max-width: 90px; } .pchip { padding-right: 10px; } .pchip-t small .xpbar { min-width: 36px; } }
 .labels text, .nb-labels text { transition: opacity .18s; }
 .labels text.fx-hide, .nb-labels text.fx-hide { opacity: 0; }
+.boot-error { margin: 8px 0 0; max-width: 420px; color: #ffb3c0; font-weight: 700; font-size: 15px; line-height: 1.4; }

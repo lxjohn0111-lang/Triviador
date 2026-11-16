@@ -4,7 +4,7 @@
 
 | File | Use |
 | --- | --- |
-| `borderwise-crazygames.zip` | Game build. `index.html` is at the root of the zip. Rebuild with `python3 tools/package_crazygames.py`. |
+| `borderwise-crazygames.zip` | Game build: one self-contained `index.html` at the zip root, with all code, styles, fonts and data embedded. Rebuild with `node tools/build-crazygames.mjs`. |
 | `borderwise-trailer-1920x1080.mp4` | Preview video: 19.6 s, 1920×1080, H.264, no audio, 7.2 MB. |
 | `cover-landscape-1920x1080.png` | Landscape cover (16:9). |
 | `cover-portrait-800x1200.png` | Portrait cover (2:3). |

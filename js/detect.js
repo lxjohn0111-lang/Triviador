@@ -1,3 +1,4 @@
+import { getJSON } from './data.js';
 // Country + language detection. Order: CrazyGames SDK geo -> timezone -> browser locale.
 export const LANGS = {
   en: 'English', hu: 'Magyar', de: 'Deutsch', es: 'Español', fr: 'Français', it: 'Italiano',
@@ -30,7 +31,7 @@ export async function detectCountry(sdkInfo, has) {
   if (cc) return { cc, source: 'sdk' };
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz) { const map = await (await fetch('data/tz.json')).json(); cc = ok(map[tz]); if (cc) return { cc, source: 'timezone' }; }
+    if (tz) { const map = await getJSON('data/tz.json'); cc = ok(map[tz]); if (cc) return { cc, source: 'timezone' }; }
   } catch (e) { /* ignore */ }
   for (const l of navigator.languages || [navigator.language || '']) {
     const m = /[-_]([A-Za-z]{2})\b/.exec(l); cc = ok(m && m[1]); if (cc) return { cc, source: 'locale' };

@@ -91,11 +91,11 @@ Bot difficulty scales with the player's league.
 
 ## CrazyGames submission pack
 
-The `crazygames/` folder holds everything the submission form asks for: the upload zip, a 19.6-second 1080p preview video, the three cover images (1920×1080, 800×1200, 800×800) and `LISTING.md` with the description, controls, tags and answers for the form. Rebuild the zip after code changes with `python3 tools/package_crazygames.py`.
+The `crazygames/` folder holds everything the submission form asks for: the upload zip, a 19.6-second 1080p preview video, the three cover images (1920×1080, 800×1200, 800×800) and `LISTING.md` with the description, controls, tags and answers for the form. Rebuild the zip after code changes with `cd tools && npm install && node build-crazygames.mjs`. The build is one self-contained `index.html`: styles, fonts, code, PeerJS and all 275 data files are embedded, so the game loads nothing but the CrazyGames SDK, however the portal serves or frames it.
 
 ## Uploading to CrazyGames
 
-Zip the **contents** of the repository root and upload the zip as an HTML5 game, with `index.html` at the root of the zip. Leave out `tools/` because it is only needed to regenerate data. The zip is about 8 MB. A country's map file (20–130 KB) loads only when that country is picked.
+Upload `crazygames/borderwise-crazygames.zip`. It contains a single `index.html` of 7.5 MB (2.8 MB zipped), which the portal serves compressed. The multi-file layout in the repository root is for development only.
 
 ## Running locally
 

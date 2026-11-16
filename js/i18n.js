@@ -1,3 +1,4 @@
+import { getJSON } from './data.js';
 // UI strings. English is bundled (always-available fallback); other languages load from data/i18n/<lang>.json.
 export const EN = {
   mode_campaign: "Long campaign",
@@ -76,7 +77,7 @@ let cur = EN; let lang = 'en';
 export async function loadLang(l) {
   lang = l;
   if (l === 'en') { cur = EN; }
-  else { try { const r = await fetch(`data/i18n/${l}.json`); cur = r.ok ? { ...EN, ...(await r.json()) } : EN; } catch (e) { cur = EN; } }
+  else { try { cur = { ...EN, ...(await getJSON(`data/i18n/${l}.json`)) }; } catch (e) { cur = EN; } }
   document.documentElement.lang = l;
 }
 export const t = (k, v) => { let s = cur[k] ?? EN[k] ?? k; if (v) s = s.replace(/\{(\w+)\}/g, (_, n) => (v[n] ?? '')); return s; };

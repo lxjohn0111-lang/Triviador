@@ -2,6 +2,7 @@
 // (geography, the player's own country, history, science, culture, numbers) so that
 // the pool is practically endless. Remembers what the player has already seen.
 import { store } from './store.js';
+import { getJSON } from './data.js';
 
 const rnd = (n) => Math.floor(Math.random() * n);
 const pick = (a) => a[rnd(a.length)];
@@ -31,7 +32,7 @@ export class QuestionBank {
   constructor() { this.lang = null; this.core = null; this.geo = null; }
 
   async load(lang) {
-    const j = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(u); return r.json(); };
+    const j = (u) => getJSON(u);
     if (!this.core) [this.core, this.geo] = await Promise.all([j('data/q/core.json'), j('data/geo/base.json')]);
     if (this.lang !== lang) {
       let L, N;
