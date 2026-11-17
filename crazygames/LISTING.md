@@ -5,7 +5,8 @@
 | File | Use |
 | --- | --- |
 | `borderwise-crazygames.zip` | Game build: one self-contained `index.html` at the zip root, with all code, styles, fonts and data embedded. Rebuild with `node tools/build-crazygames.mjs`. |
-| `borderwise-trailer-1920x1080.mp4` | Preview video: 19.6 s, 1920×1080, H.264, no audio, 7.2 MB. |
+| `borderwise-trailer-1920x1080.mp4` | Landscape preview video: 18.5 s, 1920×1080, H.264, no audio. |
+| `borderwise-trailer-1080x1920.mp4` | Portrait preview video (phone layout): 18.6 s, 1080×1920, H.264, no audio. |
 | `cover-landscape-1920x1080.png` | Landscape cover (16:9). |
 | `cover-portrait-800x1200.png` | Portrait cover (2:3). |
 | `cover-square-800x800.png` | Square cover (1:1). |

@@ -91,7 +91,7 @@ Bot difficulty scales with the player's league.
 
 ## CrazyGames submission pack
 
-The `crazygames/` folder holds everything the submission form asks for: the upload zip, a 19.6-second 1080p preview video, the three cover images (1920×1080, 800×1200, 800×800) and `LISTING.md` with the description, controls, tags and answers for the form. Rebuild the zip after code changes with `cd tools && npm install && node build-crazygames.mjs`. The build is one self-contained `index.html`: styles, fonts, code, PeerJS and all 275 data files are embedded, so the game loads nothing but the CrazyGames SDK, however the portal serves or frames it.
+The `crazygames/` folder holds everything the submission form asks for: the upload zip, landscape (1920×1080) and portrait (1080×1920) preview videos of about 18.5 seconds each, the three cover images (1920×1080, 800×1200, 800×800) and `LISTING.md` with the description, controls, tags and answers for the form. Rebuild the zip after code changes with `cd tools && npm install && node build-crazygames.mjs`. The build is one self-contained `index.html`: styles, fonts, code, PeerJS and all 275 data files are embedded, so the game loads nothing but the CrazyGames SDK, however the portal serves or frames it.
 
 ## Uploading to CrazyGames
 
